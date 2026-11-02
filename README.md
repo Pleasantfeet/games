@@ -1,2 +1,2 @@
 # runfromit
-A simple game that emphasis the need to flee all form of temptation
+A free Bible game that teaches us to flee every form of temptation.
