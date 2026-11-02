@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Run From It: a free Bible game by Pleasantfeet. Dodge temptations, make Flee or Stay decisions, and keep your hearts to the end.">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+<title>Run From It</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Figtree:ital,wght@0,400;0,600;0,700;1,500&display=swap">
+<style>
+/* Layout: phone-shaped game column — HUD on top, lane canvas in the middle, thumb controls below. Single dark night-road world. */
+:root {
+  --bg: #0b0f1a;
+  --road: #141b2c;
+  --panel: #182033;
+  --line: #2a3550;
+  --fg: #f2efe6;
+  --muted: #a7afc2;
+  --gold: #f2c14e;
+  --flee: #4fc38a;
+  --hit: #e2725b;
+  --display: "Anton", Impact, "Arial Narrow", sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.5;
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
+  padding-block: 10px; overflow: hidden; user-select: none; -webkit-user-select: none;
+}
+.game { max-width: 480px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
+.hud { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hud .score { font-family: var(--display); font-size: 28px; color: var(--gold); line-height: 1; font-variant-numeric: tabular-nums; }
+.hud .stage { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.hearts { font-size: 20px; letter-spacing: 2px; display: flex; align-items: center; gap: 6px; }
+.hearts.ouch { animation: ouch .5s; }
+@keyframes ouch { 0%,100% { transform: none; } 20% { transform: scale(1.35) rotate(-6deg); } 50% { transform: scale(.9) rotate(5deg); } }
+.shieldtag { font-size: 13px; font-weight: 700; color: var(--gold); }
+@media (prefers-reduced-motion: reduce) { .hearts.ouch { animation: none; } }
+.icon { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; width: 40px; height: 40px; font-size: 18px; cursor: pointer; }
+.stagewrap { position: relative; flex: 1; min-height: 0; border-radius: 18px; overflow: hidden; background: var(--road); border: 1px solid var(--line); }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ctrl { font-family: var(--display); font-size: 30px; background: var(--panel); color: var(--gold); border: 1px solid var(--line); border-radius: 14px; padding: 12px 0; cursor: pointer; }
+.ctrl:active { background: var(--line); }
+.toast {
+  position: absolute; left: 12px; right: 12px; top: 12px; background: color-mix(in srgb, var(--bg) 92%, transparent);
+  border: 1px solid var(--hit); border-radius: 14px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px;
+  transition: opacity .25s, transform .25s; pointer-events: none;
+}
+.toast.gold { border-color: var(--gold); }
+.toast.gold b { color: var(--gold); }
+.toast.off { opacity: 0; transform: translateY(-8px); }
+.toast b { color: var(--hit); font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: 20px; letter-spacing: .02em; }
+.toast em { font-size: 15px; }
+.toast small { color: var(--gold); font-weight: 600; }
+.overlay {
+  position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 92%, transparent);
+  display: flex; flex-direction: column; gap: 12px; padding: 20px; text-align: center; overflow-y: auto;
+}
+.overlay > :first-child { margin-top: auto; }
+.overlay > :last-child { margin-bottom: auto; }
+.brand { font-family: var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-size: 13px; }
+h1, h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; margin: 0; line-height: 1; text-wrap: balance; }
+h1 { font-size: clamp(52px, 16vw, 76px); }
+h1 span { color: var(--gold); }
+h2 { font-size: clamp(30px, 8.5vw, 42px); }
+p { margin: 0; }
+.muted { color: var(--muted); font-size: 15px; }
+.how { display: grid; gap: 7px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: 14.5px; }
+.how div { display: flex; gap: 10px; align-items: baseline; }
+.how div > span:first-child { flex: none; width: 24px; text-align: center; }
+.verse { border-left: 3px solid var(--gold); padding-left: 12px; text-align: left; display: flex; flex-direction: column; gap: 2px; }
+.verse em { font-size: 16px; }
+.verse small { color: var(--gold); font-weight: 600; }
+.big { font-family: var(--display); font-size: clamp(60px, 19vw, 92px); color: var(--gold); line-height: 1; font-variant-numeric: tabular-nums; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stats div { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px; }
+.stats b { display: block; font-family: var(--display); font-weight: 400; font-size: 26px; color: var(--fg); }
+.stats span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+.btn { font-family: var(--display); text-transform: uppercase; letter-spacing: .04em; font-size: 24px; border: 0; border-radius: 14px; padding: 14px; cursor: pointer; background: var(--gold); color: #1a1405; }
+.btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); font-size: 18px; }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn.flee { background: var(--flee); color: #08140e; }
+.btn.stay { background: transparent; color: var(--hit); border: 2px solid var(--hit); }
+.timer { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.timer i { display: block; height: 100%; background: var(--gold); width: 100%; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.tag { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-weight: 700; }
+.result { font-family: var(--display); text-transform: uppercase; font-size: 28px; line-height: 1; }
+.result.f { color: var(--flee); } .result.s { color: var(--hit); }
+.board { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.board h3 { margin: 0 0 6px; font-family: var(--display); font-weight: 400; text-transform: uppercase; letter-spacing: .04em; font-size: 18px; color: var(--gold); }
+.board ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-variant-numeric: tabular-nums; }
+.board li { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; font-size: 15px; }
+.board li span:first-child { color: var(--muted); }
+.board li.me { color: var(--gold); font-weight: 700; }
+.board .empty { color: var(--muted); font-size: 14px; }
+.namebox { display: flex; gap: 8px; }
+.namebox input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.namebox .btn { font-size: 18px; padding: 10px 14px; }
+.err { color: var(--hit); font-size: 14px; min-height: 1em; }
+.cta { color: var(--gold); font-weight: 700; text-decoration: none; padding: 10px; border: 1px solid var(--gold); border-radius: 14px; }
+.share { font-size: 14px; background: var(--bg); border: 1px dashed var(--line); border-radius: 12px; padding: 10px; color: var(--muted); user-select: text; -webkit-user-select: text; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+</style>
+
+</head>
+<body>
+<div class="game">
+  <div class="hud">
+    <div><div class="score" id="score">0</div><div class="stage" id="stage">School</div></div>
+    <div class="hearts" id="hearts" aria-label="Lives">❤️❤️❤️</div>
+    <div style="display:flex;gap:6px">
+      <button class="icon" id="mute" aria-label="Sound on or off">🔊</button>
+      <button class="icon" id="pause" aria-label="Pause">⏸</button>
+    </div>
+  </div>
+  <div class="stagewrap" id="wrap">
+    <canvas id="cv"></canvas>
+    <div class="toast off" id="toast"><b id="tTitle"></b><em id="tVerse"></em><small id="tRef"></small></div>
+    <div class="overlay" id="ov"></div>
+  </div>
+  <div class="controls">
+    <button class="ctrl" id="left" aria-label="Move left">◀</button>
+    <button class="ctrl" id="right" aria-label="Move right">▶</button>
+  </div>
+</div>
+
+<script>
+// ---------- content ----------
+const T = {
+  house:{e:"🏠",n:"Empty house",v:"Flee also youthful lusts.",r:"2 Timothy 2:22",
+    s:"Your girlfriend or boyfriend invites you over: “My parents travelled, we'll have the house to ourselves.”",
+    f:"You suggest meeting somewhere public instead. Your conscience stays clean.", st:"One “we'll just watch a movie” leads to things you can't undo.",
+    x:"Joseph ran from Potiphar's wife and left his garment behind (Genesis 39)."},
+  link:{e:"🔗",n:"The link",v:"I will set no wicked thing before mine eyes.",r:"Psalm 101:3",
+    s:"Someone drops a link in the group chat: “😂 don't open this in public.”",
+    f:"You don't click, and you leave or mute the chat.", st:"One look turns into images you can't unsee, and a habit starts.",
+    x:"David stayed on the roof and kept looking at Bathsheba (2 Samuel 11)."},
+  expo:{e:"📝",n:"Leaked expo",v:"He that walketh uprightly walketh surely.",r:"Proverbs 10:9",
+    s:"The night before exams, classmates share leaked answers and say everyone is using it.",
+    f:"You close it and study what you can. Your grade is truly yours.", st:"The answers spread, the exam gets cancelled, and names come out.",
+    x:"Achan hid what he took, and it was found out (Joshua 7)."},
+  drink:{e:"🍺",n:"Party drink",v:"Wine is a mocker, strong drink is raging.",r:"Proverbs 20:1",
+    s:"At a birthday party, friends push a cup at you: “It's just one, don't be boring.”",
+    f:"You say no thanks and leave early. People respect it more than you expected.", st:"One becomes many, and you don't remember how you got home.",
+    x:"Daniel purposed in his heart not to defile himself (Daniel 1:8)."},
+  money:{e:"💸",n:"Quick money",v:"The love of money is the root of all evil.",r:"1 Timothy 6:10",
+    s:"A friend says, “Just give me your account for one transfer, I'll drop you something.”",
+    f:"You refuse. Your name and your account stay clean.", st:"The money turns out to be fraud, and the trail leads to your account.",
+    x:"Gehazi ran after Naaman's gifts and lost far more (2 Kings 5)."},
+  gossip:{e:"🗣️",n:"Gossip chat",v:"Let no corrupt communication proceed out of your mouth.",r:"Ephesians 4:29",
+    s:"Your friends are mocking someone in the group chat and waiting for you to add something.",
+    f:"You don't join in, and you change the topic or leave.", st:"Your message gets screenshotted and shared.",
+    x:"Peter sat at the enemy's fire and ended up denying Jesus (Luke 22:55–57)."},
+  pic:{e:"📸",n:"Send a pic",v:"Abstain from all appearance of evil.",r:"1 Thessalonians 5:22",
+    s:"Someone you like says, “If you really love me, send a pic. It's just for me.”",
+    f:"You say no. If they leave over that, they've shown you who they are.", st:"“Just for me” becomes a screenshot someone else has.",
+    x:"Samson kept going back to Delilah until he lost everything (Judges 16)."},
+  sneak:{e:"🌙",n:"Sneak out",v:"My son, if sinners entice thee, consent thou not.",r:"Proverbs 1:10",
+    s:"Friends plan to sneak out at night: “Tell your parents you're sleeping at mine.”",
+    f:"You stay home. Nothing happens to you, and nothing has to be hidden.", st:"The lie grows, and something goes wrong where no one knows you are.",
+    x:"Lot's family lingered in Sodom when they should have left quickly (Genesis 19:16)."},
+  figures:{e:"📊",n:"Fake figures",v:"A false balance is abomination to the LORD.",r:"Proverbs 11:1",
+    s:"Your boss says, “Adjust these numbers a little, everybody does it.”",
+    f:"You politely refuse and offer to explain the real figures. Your integrity becomes your reputation.", st:"When the audit comes, your name is on the document.",
+    x:"Daniel's enemies could find no fault in him (Daniel 6:4)."},
+  ex:{e:"💬",n:"Ex's text",v:"No man, having put his hand to the plough, and looking back, is fit for the kingdom of God.",r:"Luke 9:62",
+    s:"An ex you left for good reasons texts: “I miss you. Come over, let's just talk.”",
+    f:"You don't reply, and the door you closed stays closed.", st:"“Just talking” pulls you back into what God brought you out of.",
+    x:"Lot's wife looked back (Genesis 19:26)."},
+  lunch:{e:"🍽️",n:"Private lunch",v:"Can a man take fire in his bosom, and his clothes not be burned?",r:"Proverbs 6:27",
+    s:"A colleague says, “Your spouse doesn't appreciate you like I do.” Now they want lunch, just the two of you.",
+    f:"You keep things professional and take that need for attention home to your spouse.", st:"Lunches turn into private chats, and the chats turn into secrets.",
+    x:"The young man in Proverbs 7 followed step by step until it was too late."},
+  flame:{e:"👋",n:"Old flame",v:"I made a covenant with mine eyes.",r:"Job 31:1",
+    s:"Someone you dated before marriage sends a friend request: “Just catching up, for old times' sake.”",
+    f:"You decline, or keep it public and brief. Old doors stay closed.", st:"“Catching up” becomes reminiscing, and soon you're comparing them with your spouse.",
+    x:"Job guarded his eyes and heart before temptation could start."},
+  bash:{e:"🗯️",n:"Spouse bashing",v:"Let every one of you… love his wife even as himself; and the wife see that she reverence her husband.",r:"Ephesians 5:33",
+    s:"Friends are complaining about their husbands or wives and turn to you: “Your own nko? Tell us.”",
+    f:"You don't join in, and you speak well of your spouse or say nothing.", st:"What you said in a moment of frustration spreads, and it gets back home.",
+    x:"Michal despised David in her heart and mocked him openly (2 Samuel 6:16, 20)."},
+  angry:{e:"😤",n:"Bed angry",v:"Let not the sun go down upon your wrath.",r:"Ephesians 4:26",
+    s:"After a big fight, you turn your back, go silent for days, and think about punishing your spouse.",
+    f:"You cool down, then talk, forgive, and pray together before the day ends.", st:"Silence builds walls, and the enemy finds a gap.",
+    x:"God told Hosea to go again and love his wife (Hosea 3:1)."}
+};
+const LEVELS = [
+  {name:"School", pool:["link","expo","gossip","sneak"], v:"Remember now thy Creator in the days of thy youth.", r:"Ecclesiastes 12:1"},
+  {name:"University", pool:["drink","money","pic","house","ex","link"], v:"Wherewithal shall a young man cleanse his way? by taking heed thereto according to thy word.", r:"Psalm 119:9"},
+  {name:"Work", pool:["figures","money","gossip","drink","ex"], v:"Whatsoever ye do, do it heartily, as to the Lord.", r:"Colossians 3:23"},
+  {name:"Marriage", pool:["lunch","flame","bash","angry","figures"], v:"Marriage is honourable in all.", r:"Hebrews 13:4"},
+  {name:"To the End", pool:Object.keys(T), v:"He that shall endure unto the end, the same shall be saved.", r:"Matthew 24:13"}
+];
+const PER_LEVEL = 9, DECIDE_AT = 4, DECIDE_SECS = 8, DECISION_SHIELD = 3, PRAYER_SHIELD = 4;
+
+// ---------- name filter ----------
+// Parts are blocked anywhere in the name; words only when they stand alone (so names like Dickson, Shittu, Bassey and Grace pass).
+const BAD_PARTS = ["fuck","fuk","bullshit","shitty","bitch","btch","cunt","pussy","whore","slut","bastard","asshole","nigg","porn","sexy","penis","vagina","boob","dildo","horny","nude","naked","ashawo","olosho","oloshi","werey","weyrey","mumu","olodo","idiot","stupid","satan","devil","demon","hitler","nazi","twerk","masturb","orgasm","sperm","condom","blowjob","jizz","wank","retard","dumbass"];
+const BAD_WORDS = ["ass","sex","shit","dick","rape","kill","tit","tits","hoe","hoes","ode","ewu","cock","nut","crap","damn","hell","piss","weed","drunk","prick","pimp","fag","fool"];
+function cleanName(raw){ return raw.replace(/[^\p{L}\p{N} ]/gu, "").replace(/\s+/g," ").trim().slice(0,14); }
+function isRude(name){
+  const n = name.toLowerCase().replace(/0/g,"o").replace(/1/g,"i").replace(/3/g,"e").replace(/4/g,"a").replace(/5/g,"s").replace(/7/g,"t").replace(/8/g,"b").replace(/9/g,"g");
+  const squashed = n.replace(/[^a-z]/g,"").replace(/(.)\1+/g,"$1");
+  if (BAD_PARTS.some(b => squashed.includes(b.replace(/(.)\1+/g,"$1")) || n.replace(/[^a-z]/g,"").includes(b))) return true;
+  return n.split(/[^a-z]+/).some(w => BAD_WORDS.includes(w));
+}
+
+// ---------- setup ----------
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d"), wrap = document.getElementById("wrap");
+const $ = id => document.getElementById(id);
+let W = 0, H = 0, DPR = 1;
+function size(){ DPR = Math.min(2, window.devicePixelRatio || 1); W = wrap.clientWidth; H = wrap.clientHeight; cv.width = W*DPR; cv.height = H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
+window.addEventListener("resize", size); size();
+const laneX = i => (W/3)*(i+0.5);
+function loadBoard(){ try { const b = JSON.parse(localStorage.getItem("runfromit-board") || "[]"); return Array.isArray(b) ? b : []; } catch(e){ return []; } }
+function saveBoard(b){ try { localStorage.setItem("runfromit-board", JSON.stringify(b)); } catch(e){} }
+let board = loadBoard();
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+// ---------- sound ----------
+let AC = null, muted = false;
+function beep(f, d=0.08, type="sine", vol=0.12, when=0){
+  if (muted) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const t = AC.currentTime + when, o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t+d);
+    o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t+d+0.02);
+  } catch(e){}
+}
+const sfx = {
+  move:()=>beep(520,0.05,"triangle",0.06),
+  book:()=>{beep(880,0.08);beep(1320,0.1,"sine",0.1,0.07);},
+  oil:()=>{beep(660,0.1);beep(880,0.1,"sine",0.1,0.08);beep(1100,0.14,"sine",0.1,0.16);},
+  shield:()=>[784,988,1175,1568].forEach((f,i)=>beep(f,0.18,"sine",0.09,i*0.07)),
+  bounce:()=>beep(1200,0.06,"triangle",0.08),
+  hit:()=>{beep(160,0.25,"sawtooth",0.12);beep(110,0.3,"square",0.06,0.05);},
+  decide:()=>{beep(440,0.12,"square",0.06);beep(440,0.12,"square",0.06,0.2);},
+  level:()=>[523,659,784,1046].forEach((f,i)=>beep(f,0.14,"triangle",0.1,i*0.1)),
+  over:()=>[392,330,262].forEach((f,i)=>beep(f,0.22,"triangle",0.1,i*0.18))
+};
+$("mute").onclick = () => { muted = !muted; $("mute").textContent = muted ? "🔇" : "🔊"; };
+
+// ---------- state ----------
+let G;
+function fresh(){
+  return { mode:"start", lvl:0, score:0, hearts:3, fled:0, fledLvl:0, sinceDecide:0, lane:1, px:laneX(1), objs:[], spawnT:0.6, t:0,
+    inv:0, shield:0, roadOff:0, books:0, hits:{}, decisions:0, decFled:0, dec:null, decDone:false, flash:0, shake:0 };
+}
+G = fresh();
+function ouch(){ const h = $("hearts"); h.classList.remove("ouch"); void h.offsetWidth; h.classList.add("ouch"); }
+function hud(){
+  $("score").textContent = Math.floor(G.score);
+  $("stage").textContent = LEVELS[G.lvl].name;
+  $("hearts").innerHTML = "❤️".repeat(Math.max(0,G.hearts)) + "🖤".repeat(Math.max(0,3-G.hearts)) + (G.shield > 0 ? `<span class="shieldtag">🛡️ ${Math.ceil(G.shield)}s</span>` : "");
+}
+
+// ---------- input ----------
+function move(d){ if (G.mode!=="run") return; const n = Math.max(0, Math.min(2, G.lane+d)); if (n!==G.lane){ G.lane=n; sfx.move(); } }
+$("left").addEventListener("pointerdown", e=>{e.preventDefault(); move(-1);});
+$("right").addEventListener("pointerdown", e=>{e.preventDefault(); move(1);});
+document.addEventListener("keydown", e=>{
+  if (e.target.tagName==="INPUT") return;
+  if (e.key==="ArrowLeft"||e.key==="a") move(-1);
+  if (e.key==="ArrowRight"||e.key==="d") move(1);
+  if (e.key===" "||e.key==="Escape"){ e.preventDefault(); togglePause(); }
+});
+let sx = null;
+cv.addEventListener("pointerdown", e=>{ sx = e.clientX; });
+cv.addEventListener("pointerup", e=>{
+  if (sx===null) return;
+  const dx = e.clientX - sx;
+  if (Math.abs(dx) > 28) move(dx>0?1:-1);
+  else { const r = cv.getBoundingClientRect(); move(e.clientX - r.left < r.width/2 ? -1 : 1); }
+  sx = null;
+});
+$("pause").onclick = togglePause;
+function togglePause(){
+  if (G.mode==="run"){ G.mode="paused"; showOv(`<h2>Paused</h2><p class="muted">${LEVELS[G.lvl].name} · ${G.fled} temptations fled</p><button class="btn" id="go">Resume</button><button class="btn ghost" id="quit">Quit run</button>`); $("go").onclick=resume; $("quit").onclick=start; }
+  else if (G.mode==="paused") resume();
+}
+function resume(){ hideOv(); G.mode="run"; last = performance.now(); }
+document.addEventListener("visibilitychange", ()=>{ if (document.hidden && G.mode==="run") togglePause(); });
+
+// ---------- overlays ----------
+function showOv(html){ $("ov").innerHTML = html; $("ov").hidden = false; $("ov").scrollTop = 0; }
+function hideOv(){ $("ov").hidden = true; }
+let toastTimer = null;
+function toast(title, verse, ref, gold){
+  $("tTitle").textContent = title; $("tVerse").textContent = `“${verse}”`; $("tRef").textContent = ref + " (KJV)";
+  $("toast").classList.toggle("gold", !!gold);
+  $("toast").classList.remove("off"); clearTimeout(toastTimer); toastTimer = setTimeout(()=>$("toast").classList.add("off"), 2600);
+}
+function boardHTML(hl){
+  if (!board.length) return `<div class="board"><h3>Top runners on this phone</h3><p class="empty">No scores yet. Be the first!</p></div>`;
+  return `<div class="board"><h3>Top runners on this phone</h3><ol>${board.map((r,i)=>`<li class="${i===hl?"me":""}"><span>${i+1}.</span><span>${esc(r.name)}</span><span>${r.score}</span></li>`).join("")}</ol></div>`;
+}
+
+function start(){
+  G = fresh(); hud();
+  showOv(`
+    <div class="brand">Pleasantfeet presents</div>
+    <h1>Run From <span>It</span></h1>
+    <p class="muted">Temptations are coming at you. Don't stand there. Run!</p>
+    <div class="how">
+      <div><span>👆</span><span>Swipe, tap a side, or use ◀ ▶ to switch lanes</span></div>
+      <div><span>🔗</span><span>Dodge every temptation. Each hit costs a heart</span></div>
+      <div><span>⏱️</span><span>Decision moments: choose Flee or Stay before time runs out</span></div>
+      <div><span>🙏</span><span>Prayer shield: temptations bounce off you</span></div>
+      <div><span>📖</span><span>Bibles give bonus points · 🪔 lamp oil gives back a heart</span></div>
+      <div><span>🏁</span><span>School → University → Work → Marriage → To the End</span></div>
+    </div>
+    <button class="btn" id="go">Start running</button>
+    ${boardHTML(-1)}`);
+  $("go").onclick = () => { G = fresh(); hud(); hideOv(); levelCard(); };
+}
+function levelCard(){
+  const L = LEVELS[G.lvl];
+  G.mode = "card"; G.objs = []; G.spawnT = 0.8;
+  showOv(`
+    <div class="brand">Stage ${G.lvl+1}</div>
+    <h2>${L.name}</h2>
+    <div class="verse"><em>“${L.v}”</em><small>${L.r} (KJV)</small></div>
+    <p class="muted">Watch out for: ${L.pool.slice(0,5).map(k=>T[k].e+" "+T[k].n).join(" · ")}</p>
+    <button class="btn" id="go">${G.lvl===0?"Go!":"Keep running"}</button>`);
+  $("go").onclick = () => { hideOv(); G.mode = "run"; last = performance.now(); };
+}
+
+// ---------- decision moments ----------
+function decide(){
+  const L = LEVELS[G.lvl], k = L.pool[Math.floor(Math.random()*L.pool.length)], t = T[k];
+  G.mode = "decide"; G.dec = {k, left: DECIDE_SECS}; G.sinceDecide = 0; G.decDone = true; sfx.decide();
+  showOv(`
+    <div class="brand">⏱️ Decision moment</div>
+    <div class="card">
+      <div class="tag">${t.e} ${t.n}</div>
+      <p style="font-size:17px">${t.s}</p>
+      <div class="timer"><i id="tbar"></i></div>
+    </div>
+    <div class="choices"><button class="btn flee" id="cf">Flee</button><button class="btn stay" id="cs">Stay</button></div>
+    <p class="muted" style="font-size:13px">Temptation doesn't wait. Decide before time runs out.</p>`);
+  $("cf").onclick = () => decided("flee");
+  $("cs").onclick = () => decided("stay");
+}
+function decided(choice){
+  if (G.mode !== "decide") return;
+  const k = G.dec.k, t = T[k];
+  G.mode = "decided"; G.decisions++;
+  let head;
+  if (choice === "flee"){
+    G.decFled++; G.score += 30; G.shield = DECISION_SHIELD; sfx.shield();
+    head = `<div class="result f">You fled! 🛡️</div><p>${t.f}</p><p class="muted">+30 points and a 3-second shield.</p>`;
+  } else {
+    G.hearts--; G.hits[k] = (G.hits[k]||0) + 1; sfx.hit(); ouch();
+    head = `<div class="result s">${choice==="late"?"You hesitated…":"You stayed"}</div><p>${t.st}</p>
+      ${choice==="late"?`<p class="muted">Waiting too long is how many people fall. You lose a heart.</p>`:`<p class="muted">You lose a heart.</p>`}`;
+  }
+  hud();
+  showOv(`
+    <div class="card">${head}
+      <div class="verse"><em>“${t.v}”</em><small>${t.r} (KJV)</small></div>
+      <p class="muted" style="font-size:14px">${t.x}</p>
+    </div>
+    <button class="btn" id="go">${G.hearts<=0?"See my result":"Keep running"}</button>`);
+  $("go").onclick = () => { if (G.hearts<=0) return gameOver(); hideOv(); G.mode = "run"; last = performance.now(); };
+}
+
+// ---------- game over ----------
+function gameOver(){
+  G.mode = "over"; sfx.over();
+  const sc = Math.floor(G.score);
+  const worst = Object.entries(G.hits).sort((a,b)=>b[1]-a[1])[0];
+  const qualifies = sc > 0 && (board.length < 10 || sc > board[board.length-1].score);
+  const shareText = `I scored ${sc} and fled ${G.fled + G.decFled} temptations in Run From It by Pleasantfeet 🏃🏽 Can you beat me? #Pleasantfeet`;
+  const w = worst ? T[worst[0]] : null;
+  showOv(`
+    <div class="brand">Run over</div>
+    <div class="big">${sc}</div>
+    <p class="muted">You reached <b style="color:var(--fg)">${LEVELS[G.lvl].name}</b></p>
+    <div class="stats"><div><b>${G.fled + G.decFled}</b><span>Temptations fled</span></div><div><b>${G.books}</b><span>Bibles grabbed</span></div></div>
+    ${w ? `<div class="card">
+      <div class="tag">What got you</div>
+      <div class="result s" style="font-size:24px">${w.e} ${w.n}</div>
+      <div class="verse"><em>“${w.v}”</em><small>${w.r} (KJV)</small></div>
+      <p class="muted" style="font-size:14px">${w.x}</p>
+      <p style="font-size:15px"><b>Think about it:</b> if “${w.n.toLowerCase()}” showed up in your real life this week, what would you do to flee?</p>
+    </div>` : ``}
+    ${qualifies ? `<div class="card"><div class="tag">You made the top 10!</div>
+      <div class="namebox"><input id="nm" maxlength="14" placeholder="Your name or nickname" autocomplete="off" aria-label="Your name"><button class="btn" id="save">Save</button></div>
+      <p class="err" id="err"></p></div>` : ``}
+    <div id="boardslot">${boardHTML(-1)}</div>
+    <div class="verse"><em>“God is faithful, who will not suffer you to be tempted above that ye are able; but will with the temptation also make a way to escape.”</em><small>1 Corinthians 10:13 (KJV)</small></div>
+    <button class="btn" id="go">Run again</button>
+    <button class="btn ghost" id="copy">Share my score</button>
+    <p class="share" id="shareText" hidden>${esc(shareText)}</p>
+    <a class="cta" href="https://www.youtube.com/@Pleasantfeet?sub_confirmation=1" target="_blank" rel="noopener">Visit Pleasantfeet on YouTube →</a>`);
+  $("go").onclick = () => { G = fresh(); hud(); hideOv(); levelCard(); };
+  $("copy").onclick = async () => {
+    try { await navigator.clipboard.writeText(shareText); $("copy").textContent = "Copied! Paste it in the comments"; }
+    catch(e){
+      const p = $("shareText"); p.hidden = false;
+      const r = document.createRange(); r.selectNodeContents(p); const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      $("copy").textContent = "Copy the text below";
+    }
+  };
+  if (qualifies){
+    const doSave = () => {
+      const name = cleanName($("nm").value);
+      if (!name){ $("err").textContent = "Type a name first."; return; }
+      if (isRude(name)){ $("err").textContent = "Please choose a different name. Keep it clean 🙂"; return; }
+      board.push({name, score: sc}); board.sort((a,b)=>b.score-a.score); board = board.slice(0,10); saveBoard(board);
+      const idx = board.findIndex(r=>r.name===name && r.score===sc);
+      $("nm").closest(".card").remove(); $("boardslot").innerHTML = boardHTML(idx);
+    };
+    $("save").onclick = doSave;
+    $("nm").addEventListener("keydown", e => { if (e.key==="Enter") doSave(); });
+  }
+}
+
+// ---------- game loop ----------
+function speed(){ return (H*0.42) + G.lvl*(H*0.07) + Math.min(G.t, 40)*2; }
+function spawn(){
+  const L = LEVELS[G.lvl], lanes = [0,1,2].sort(()=>Math.random()-0.5);
+  const n = Math.random() < 0.22 + G.lvl*0.07 ? 2 : 1;
+  for (let i=0;i<n;i++){ const k = L.pool[Math.floor(Math.random()*L.pool.length)]; G.objs.push({kind:"bad", lane:lanes[i], y:-40, k}); }
+  const free = lanes[n], r = Math.random();
+  if (G.hearts < 3 && r < 0.06) G.objs.push({kind:"oil", lane:free, y:-40});
+  else if (G.shield <= 0 && G.lvl > 0 && r < 0.05) G.objs.push({kind:"pray", lane:free, y:-40});
+  else if (r < 0.42) G.objs.push({kind:"book", lane:free, y:-40});
+}
+let last = performance.now();
+function step(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  if (G.mode === "decide"){
+    G.dec.left -= dt;
+    const bar = $("tbar"); if (bar) bar.style.width = Math.max(0, G.dec.left/DECIDE_SECS*100) + "%";
+    if (G.dec.left <= 0) decided("late");
+  }
+  if (G.mode === "run"){
+    G.t += dt; const sp = speed();
+    G.roadOff = (G.roadOff + sp*dt) % 60;
+    G.px += (laneX(G.lane) - G.px) * Math.min(1, dt*16);
+    G.score += sp*dt/20;
+    if (G.inv > 0) G.inv -= dt;
+    if (G.shield > 0) G.shield -= dt;
+    if (G.flash > 0) G.flash -= dt;
+    if (G.shake > 0) G.shake -= dt;
+    G.spawnT -= dt;
+    if (G.spawnT <= 0){ spawn(); G.spawnT = Math.max(0.5, 1.15 - G.lvl*0.13) * (0.85 + Math.random()*0.3); }
+    const py = H - 80;
+    let died = false;
+    for (const o of G.objs){
+      if (o.fly){ o.y -= sp*dt*1.5; o.fx += o.fv*dt; continue; }
+      o.y += sp*dt;
+      if (o.done) continue;
+      const near = Math.abs(o.y - py) < 34 && Math.abs(laneX(o.lane) - G.px) < W/6*0.75;
+      if (near){
+        if (o.kind==="book"){ o.done = o.pop = true; G.score += 50; G.books++; sfx.book(); }
+        else if (o.kind==="oil"){ o.done = o.pop = true; G.hearts = Math.min(3, G.hearts+1); sfx.oil(); }
+        else if (o.kind==="pray"){ o.done = o.pop = true; G.shield = PRAYER_SHIELD; sfx.shield(); toast("🙏 Prayer shield!", "Resist the devil, and he will flee from you.", "James 4:7", true); }
+        else if (G.shield > 0){ o.done = true; o.fly = true; o.fx = 0; o.fv = (Math.random()<0.5?-1:1)*W; G.fled++; G.fledLvl++; G.sinceDecide++; G.score += 10; sfx.bounce(); }
+        else if (G.inv <= 0){
+          o.done = true; o.hit = true; G.hearts--; G.inv = 1.4; G.flash = 0.45; G.shake = 0.3; ouch(); G.hits[o.k] = (G.hits[o.k]||0)+1; sfx.hit();
+          toast(`${T[o.k].e} ${T[o.k].n}! Flee!`, T[o.k].v, T[o.k].r);
+          if (G.hearts <= 0) died = true;
+        }
+      } else if (o.kind==="bad" && o.y > py + 40){
+        o.done = true; G.fled++; G.fledLvl++; G.sinceDecide++; G.score += 10;
+      }
+    }
+    G.objs = G.objs.filter(o => o.y < H + 60 && o.y > -120 && !o.pop);
+    hud();
+    if (died){ draw(now); gameOver(); }
+    else if (G.fledLvl >= PER_LEVEL && G.lvl < LEVELS.length-1){ G.lvl++; G.fledLvl = 0; G.sinceDecide = 0; G.decDone = false; sfx.level(); hud(); levelCard(); }
+    else if ((!G.decDone && (G.lvl === 1 || G.lvl === 3) && G.fledLvl >= DECIDE_AT) || (G.lvl === LEVELS.length-1 && G.sinceDecide >= 20)){ decide(); }
+  }
+  draw(now);
+  requestAnimationFrame(step);
+}
+
+// ---------- drawing ----------
+const EMOJI_FONT = "system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
+function draw(now=0){
+  ctx.save();
+  if (G.shake > 0) ctx.translate((Math.random()-0.5)*14*G.shake/0.3, (Math.random()-0.5)*10*G.shake/0.3);
+  ctx.fillStyle = "#141b2c"; ctx.fillRect(-20,-20,W+40,H+40);
+  const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"rgba(242,193,78,0.06)"); g.addColorStop(1,"rgba(242,193,78,0)");
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle = "rgba(167,175,194,0.22)"; ctx.lineWidth = 3; ctx.setLineDash([22,38]); ctx.lineDashOffset = -G.roadOff;
+  for (let i=1;i<3;i++){ ctx.beginPath(); ctx.moveTo(W/3*i,0); ctx.lineTo(W/3*i,H); ctx.stroke(); }
+  ctx.setLineDash([]);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const o of G.objs){
+    const x = laneX(o.lane) + (o.fx||0), y = o.y;
+    if (o.kind === "bad"){
+      ctx.globalAlpha = o.fly ? 0.6 : 1;
+      ctx.fillStyle = o.hit ? "rgba(226,114,91,0.35)" : "rgba(226,114,91,0.16)";
+      ctx.strokeStyle = "rgba(226,114,91,0.75)"; ctx.lineWidth = 2;
+      rr(x-30, y-28, 60, 56, 14); ctx.fill(); ctx.stroke();
+      ctx.font = "30px " + EMOJI_FONT; ctx.fillText(T[o.k].e, x, y-2);
+      ctx.font = "600 11px Figtree, system-ui, sans-serif"; ctx.fillStyle = "#f2efe6"; ctx.fillText(T[o.k].n, x, y+40);
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.fillStyle = o.kind==="pray" ? "rgba(79,195,138,0.22)" : "rgba(242,193,78,0.18)";
+      ctx.beginPath(); ctx.arc(x, y, 24 + Math.sin(now/180)*2, 0, Math.PI*2); ctx.fill();
+      ctx.font = "26px " + EMOJI_FONT; ctx.fillText(o.kind==="book"?"📖":o.kind==="oil"?"🪔":"🙏", x, y);
+    }
+  }
+  const px = G.px, py = H - 80, blink = G.inv > 0 && Math.floor(G.inv*10)%2===0;
+  if (G.shield > 0){
+    const a = G.shield < 1.2 ? (Math.floor(G.shield*8)%2 ? 0.25 : 0.7) : 0.7;
+    ctx.strokeStyle = `rgba(242,193,78,${a})`; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(px, py-2, 40 + Math.sin(now/120)*2, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = "rgba(242,193,78,0.10)"; ctx.fill();
+  }
+  if (!blink){
+    const ph = Math.sin(now/90) * (G.mode==="run"?1:0.2);
+    ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(px, py+34, 20, 6, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "#f2efe6"; ctx.lineWidth = 6; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(px-6, py+10); ctx.lineTo(px-6 - ph*4, py+30 + ph*3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px+6, py+10); ctx.lineTo(px+6 + ph*4, py+30 - ph*3); ctx.stroke();
+    ctx.strokeStyle = "#f2c14e"; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(px-12, py-6); ctx.lineTo(px-18, py+8 + ph*6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px+12, py-6); ctx.lineTo(px+18, py+8 - ph*6); ctx.stroke();
+    ctx.fillStyle = "#f2c14e"; rr(px-13, py-12, 26, 26, 8); ctx.fill();
+    ctx.fillStyle = "#3a2a1a"; ctx.beginPath(); ctx.arc(px, py-22, 11, 0, Math.PI*2); ctx.fill();
+  }
+  if (G.lvl < LEVELS.length-1){
+    ctx.fillStyle = "rgba(255,255,255,0.08)"; rr(12, H-12, W-24, 5, 3); ctx.fill();
+    ctx.fillStyle = "#4fc38a"; rr(12, H-12, (W-24)*Math.min(1, G.fledLvl/PER_LEVEL), 5, 3); ctx.fill();
+  }
+  ctx.restore();
+  if (G.flash > 0){ ctx.fillStyle = `rgba(226,114,91,${Math.min(0.45, G.flash)})`; ctx.fillRect(0,0,W,H); }
+}
+function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+start(); requestAnimationFrame(step);
+</script>
+
+</body>
+</html>
